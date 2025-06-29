@@ -147,6 +147,21 @@ body {
     /* This ensures seamless visual appearance while improving performance */
 }
 
+/* Virtual scrolling styles */
+.log-cluster.loaded-cluster {
+    /* Loaded clusters with actual content */
+}
+
+.log-cluster.placeholder-cluster {
+    /* Placeholder clusters with fixed height */
+    transition: all 0.2s ease-in-out;
+}
+
+.log-cluster.placeholder-cluster:hover {
+    background-color: #f0f0f0 !important;
+    border-color: #bbb !important;
+}
+
 /* Debug panel styles */
 .debug-panel {
     background-color: #f8f9fa;

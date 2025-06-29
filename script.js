@@ -35,6 +35,11 @@ let clusterObserver = null;
 let visibleClusters = new Set();
 let totalClustersCount = 0;
 
+// Virtual scrolling state
+let referenceClusterHeight = 0;
+let loadedClusters = new Map(); // Map of cluster index to DOM element
+let currentViewportClusters = new Set(); // Currently visible clusters + buffer
+
 /**
  * Generates log data and populates the logData array
  * Each log entry is a JSON object with timestamp, level, and message
@@ -121,59 +126,115 @@ function createLogRowElement(logEntry) {
 }
 
 /**
- * Renders the log data to the DOM using clusterization for performance
+ * Renders the log data to the DOM using virtual scrolling for performance
  */
 function renderLogData() {
     const tbody = document.getElementById('logTableBody');
-    console.log(`Rendering ${logData.length} log entries with clusterization (${CLUSTER_SIZE} logs per cluster)...`);
+    console.log(`Rendering ${logData.length} log entries with virtual scrolling (${CLUSTER_SIZE} logs per cluster)...`);
     const startTime = performance.now();
     
     // Clear existing content
     tbody.innerHTML = '';
+    loadedClusters.clear();
     
-    let currentCluster = null;
-    let logsInCurrentCluster = 0;
-    let clusterIndex = 0;
+    // Calculate total clusters count
+    totalClustersCount = Math.ceil(logData.length / CLUSTER_SIZE);
     
-    for (let i = 0; i < logData.length; i++) {
-        // Create a new cluster if needed
-        if (logsInCurrentCluster === 0) {
-            currentCluster = document.createElement('div');
-            currentCluster.className = 'log-cluster';
-            currentCluster.setAttribute('data-cluster-index', clusterIndex);
+    // Step 1: Load only the first and second cluster into DOM
+    const firstCluster = createClusterElement(0);
+    const secondCluster = totalClustersCount > 1 ? createClusterElement(1) : null;
+    
+    tbody.appendChild(firstCluster);
+    if (secondCluster) {
+        tbody.appendChild(secondCluster);
+    }
+    
+    // Step 2: Get the height of the first cluster (after DOM insertion)
+    setTimeout(() => {
+        referenceClusterHeight = firstCluster.offsetHeight;
+        console.log(`Reference cluster height: ${referenceClusterHeight}px`);
+        
+        // Step 3: Create empty placeholder clusters for the rest
+        for (let i = (secondCluster ? 2 : 1); i < totalClustersCount; i++) {
+            const placeholderCluster = createPlaceholderCluster(i);
+            tbody.appendChild(placeholderCluster);
         }
         
-        // Create row element from log data
+        const endTime = performance.now();
+        console.log(`Virtual scrolling setup completed! ${totalClustersCount} clusters created in ${(endTime - startTime).toFixed(2)}ms`);
+        console.log(`Only ${secondCluster ? 2 : 1} clusters loaded with actual content, ${totalClustersCount - (secondCluster ? 2 : 1)} are placeholders`);
+        
+        // Initialize cluster visibility monitoring
+        initializeVirtualScrollObserver();
+        updateDebugInfo();
+    }, 0);
+}
+
+/**
+ * Creates a cluster element with actual log data
+ * @param {number} clusterIndex - Index of the cluster to create
+ * @returns {HTMLElement} DOM element representing the cluster
+ */
+function createClusterElement(clusterIndex) {
+    const cluster = document.createElement('div');
+    cluster.className = 'log-cluster loaded-cluster';
+    cluster.setAttribute('data-cluster-index', clusterIndex);
+    
+    const startIndex = clusterIndex * CLUSTER_SIZE;
+    const endIndex = Math.min(startIndex + CLUSTER_SIZE, logData.length);
+    
+    // Create log rows for this cluster
+    for (let i = startIndex; i < endIndex; i++) {
         const row = createLogRowElement(logData[i]);
-        currentCluster.appendChild(row);
-        logsInCurrentCluster++;
-        
-        // When cluster is full, append it to tbody and reset
-        if (logsInCurrentCluster === CLUSTER_SIZE) {
-            tbody.appendChild(currentCluster);
-            logsInCurrentCluster = 0;
-            currentCluster = null;
-            clusterIndex++;
-        }
+        cluster.appendChild(row);
     }
     
-    // Append any remaining logs in the last cluster
-    if (currentCluster && logsInCurrentCluster > 0) {
-        currentCluster.setAttribute('data-cluster-index', clusterIndex);
-        tbody.appendChild(currentCluster);
-        clusterIndex++;
+    // Store in loaded clusters map
+    loadedClusters.set(clusterIndex, cluster);
+    
+    return cluster;
+}
+
+/**
+ * Creates a placeholder cluster with fixed height
+ * @param {number} clusterIndex - Index of the cluster to create
+ * @returns {HTMLElement} DOM element representing the placeholder cluster
+ */
+function createPlaceholderCluster(clusterIndex) {
+    const cluster = document.createElement('div');
+    cluster.className = 'log-cluster placeholder-cluster';
+    cluster.setAttribute('data-cluster-index', clusterIndex);
+    
+    // Calculate height based on number of logs in this cluster
+    const startIndex = clusterIndex * CLUSTER_SIZE;
+    const endIndex = Math.min(startIndex + CLUSTER_SIZE, logData.length);
+    const logsInCluster = endIndex - startIndex;
+    
+    // Use proportional height based on reference cluster height
+    let clusterHeight;
+    if (clusterIndex === totalClustersCount - 1 && logsInCluster < CLUSTER_SIZE) {
+        // Last cluster might have fewer logs
+        clusterHeight = Math.round((referenceClusterHeight * logsInCluster) / CLUSTER_SIZE);
+    } else {
+        // Full cluster
+        clusterHeight = referenceClusterHeight;
     }
     
-    // Store total clusters count
-    totalClustersCount = clusterIndex;
+    cluster.style.height = `${clusterHeight}px`;
+    cluster.style.backgroundColor = '#f9f9f9'; // Light background to indicate placeholder
+    cluster.style.border = '1px dashed #ddd';
+    cluster.style.display = 'flex';
+    cluster.style.alignItems = 'center';
+    cluster.style.justifyContent = 'center';
+    cluster.style.color = '#999';
+    cluster.style.fontSize = '14px';
     
-    const endTime = performance.now();
-    console.log(`Rendering completed! Rendered ${logData.length} rows in ${totalClustersCount} clusters in ${(endTime - startTime).toFixed(2)}ms`);
-    console.log(`Performance improvement: ${CLUSTER_SIZE} DOM operations reduced to ${totalClustersCount} operations`);
+    // Add placeholder text
+    const placeholderText = document.createElement('div');
+    placeholderText.textContent = `Cluster ${clusterIndex} (${logsInCluster} logs) - Scroll to load`;
+    cluster.appendChild(placeholderText);
     
-    // Initialize cluster visibility monitoring
-    initializeClusterObserver();
-    updateDebugInfo();
+    return cluster;
 }
 
 /**
@@ -184,10 +245,163 @@ function initializeApplication() {
     renderLogData();
 }
 
+// ===== VIRTUAL SCROLLING SECTION =====
+
+/**
+ * Initializes the virtual scroll observer to monitor cluster visibility
+ */
+function initializeVirtualScrollObserver() {
+    // Disconnect existing observer if any
+    if (clusterObserver) {
+        clusterObserver.disconnect();
+    }
+    
+    // Create new Intersection Observer with buffer zone
+    const options = {
+        root: document.getElementById('tableWrapper'), // Use the scrollable container as root
+        rootMargin: '200px 0px 200px 0px', // 200px buffer above and below viewport
+        threshold: 0.01 // Trigger when 1% of cluster is visible
+    };
+    
+    clusterObserver = new IntersectionObserver(handleVirtualScrollVisibility, options);
+    
+    // Observe all cluster elements
+    const clusters = document.querySelectorAll('.log-cluster');
+    clusters.forEach(cluster => {
+        clusterObserver.observe(cluster);
+    });
+    
+    addDebugMessage(`Initialized virtual scroll observer for ${clusters.length} clusters`, 'info');
+    console.log(`Virtual scroll observer initialized for ${clusters.length} clusters`);
+}
+
+/**
+ * Handles virtual scroll visibility changes
+ * @param {IntersectionObserverEntry[]} entries - Array of intersection entries
+ */
+function handleVirtualScrollVisibility(entries) {
+    let needsUpdate = false;
+    
+    entries.forEach(entry => {
+        const clusterIndex = parseInt(entry.target.getAttribute('data-cluster-index'));
+        
+        if (entry.isIntersecting) {
+            // Cluster entered viewport + buffer zone
+            if (!visibleClusters.has(clusterIndex)) {
+                visibleClusters.add(clusterIndex);
+                addDebugMessage(`Cluster ${clusterIndex} entered buffer zone`, 'enter');
+                console.log(`Cluster ${clusterIndex} entered buffer zone`);
+                needsUpdate = true;
+            }
+        } else {
+            // Cluster left viewport + buffer zone
+            if (visibleClusters.has(clusterIndex)) {
+                visibleClusters.delete(clusterIndex);
+                addDebugMessage(`Cluster ${clusterIndex} left buffer zone`, 'exit');
+                console.log(`Cluster ${clusterIndex} left buffer zone`);
+                needsUpdate = true;
+            }
+        }
+    });
+    
+    if (needsUpdate) {
+        updateClusterLoading();
+    }
+    
+    // Update debug display
+    updateDebugInfo();
+}
+
+/**
+ * Updates which clusters should be loaded based on current visibility
+ */
+function updateClusterLoading() {
+    const tbody = document.getElementById('logTableBody');
+    const newViewportClusters = new Set(visibleClusters);
+    
+    // Load clusters that are now in viewport but weren't before
+    newViewportClusters.forEach(clusterIndex => {
+        if (!currentViewportClusters.has(clusterIndex)) {
+            loadCluster(clusterIndex);
+        }
+    });
+    
+    // Unload clusters that are no longer in viewport
+    currentViewportClusters.forEach(clusterIndex => {
+        if (!newViewportClusters.has(clusterIndex)) {
+            unloadCluster(clusterIndex);
+        }
+    });
+    
+    // Update current viewport clusters
+    currentViewportClusters = newViewportClusters;
+    
+    // Log current state
+    const loadedCount = Array.from(currentViewportClusters).filter(index => 
+        loadedClusters.has(index)
+    ).length;
+    addDebugMessage(`Loaded clusters: ${loadedCount}/${totalClustersCount}`, 'info');
+}
+
+/**
+ * Loads a cluster with actual log data
+ * @param {number} clusterIndex - Index of the cluster to load
+ */
+function loadCluster(clusterIndex) {
+    // Skip if already loaded
+    if (loadedClusters.has(clusterIndex)) {
+        return;
+    }
+    
+    const tbody = document.getElementById('logTableBody');
+    const existingCluster = tbody.querySelector(`[data-cluster-index="${clusterIndex}"]`);
+    
+    if (existingCluster && existingCluster.classList.contains('placeholder-cluster')) {
+        // Replace placeholder with loaded cluster
+        const loadedCluster = createClusterElement(clusterIndex);
+        tbody.replaceChild(loadedCluster, existingCluster);
+        
+        // Start observing the new cluster
+        clusterObserver.observe(loadedCluster);
+        
+        addDebugMessage(`Loaded cluster ${clusterIndex}`, 'info');
+        console.log(`Loaded cluster ${clusterIndex} with actual data`);
+    }
+}
+
+/**
+ * Unloads a cluster and replaces it with a placeholder
+ * @param {number} clusterIndex - Index of the cluster to unload
+ */
+function unloadCluster(clusterIndex) {
+    // Don't unload the first two clusters (keep them always loaded for reference)
+    if (clusterIndex <= 1) {
+        return;
+    }
+    
+    const tbody = document.getElementById('logTableBody');
+    const existingCluster = tbody.querySelector(`[data-cluster-index="${clusterIndex}"]`);
+    
+    if (existingCluster && existingCluster.classList.contains('loaded-cluster')) {
+        // Replace loaded cluster with placeholder
+        const placeholderCluster = createPlaceholderCluster(clusterIndex);
+        tbody.replaceChild(placeholderCluster, existingCluster);
+        
+        // Remove from loaded clusters map
+        loadedClusters.delete(clusterIndex);
+        
+        // Start observing the new placeholder
+        clusterObserver.observe(placeholderCluster);
+        
+        addDebugMessage(`Unloaded cluster ${clusterIndex}`, 'info');
+        console.log(`Unloaded cluster ${clusterIndex} and replaced with placeholder`);
+    }
+}
+
 // ===== CLUSTER VISIBILITY MONITORING SECTION =====
 
 /**
- * Initializes the Intersection Observer to monitor cluster visibility
+ * Initializes the Intersection Observer to monitor cluster visibility (legacy function)
  */
 function initializeClusterObserver() {
     // Disconnect existing observer if any
