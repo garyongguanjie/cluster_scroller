@@ -29,11 +29,13 @@ let logData = [];
 // Configuration
 const CLUSTER_SIZE = 50; // Number of logs per cluster
 const TOTAL_LOGS = 10000; // Total number of logs to generate
+const DEBOUNCE_DELAY = 150; // Debounce delay in milliseconds for cluster updates
 
 // Cluster visibility tracking
 let clusterObserver = null;
 let visibleClusters = new Set();
 let totalClustersCount = 0;
+let debounceTimer = null;
 
 // Virtual scrolling state
 let referenceClusterHeight = 0;
@@ -305,7 +307,10 @@ function handleVirtualScrollVisibility(entries) {
     });
     
     if (needsUpdate) {
-        updateClusterLoading();
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => {
+            updateClusterLoading();
+        }, DEBOUNCE_DELAY);
     }
     
     // Update debug display
