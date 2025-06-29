@@ -30,6 +30,11 @@ let logData = [];
 const CLUSTER_SIZE = 50; // Number of logs per cluster
 const TOTAL_LOGS = 10000; // Total number of logs to generate
 
+// Cluster visibility tracking
+let clusterObserver = null;
+let visibleClusters = new Set();
+let totalClustersCount = 0;
+
 /**
  * Generates log data and populates the logData array
  * Each log entry is a JSON object with timestamp, level, and message
@@ -128,12 +133,14 @@ function renderLogData() {
     
     let currentCluster = null;
     let logsInCurrentCluster = 0;
+    let clusterIndex = 0;
     
     for (let i = 0; i < logData.length; i++) {
         // Create a new cluster if needed
         if (logsInCurrentCluster === 0) {
             currentCluster = document.createElement('div');
             currentCluster.className = 'log-cluster';
+            currentCluster.setAttribute('data-cluster-index', clusterIndex);
         }
         
         // Create row element from log data
@@ -146,18 +153,27 @@ function renderLogData() {
             tbody.appendChild(currentCluster);
             logsInCurrentCluster = 0;
             currentCluster = null;
+            clusterIndex++;
         }
     }
     
     // Append any remaining logs in the last cluster
     if (currentCluster && logsInCurrentCluster > 0) {
+        currentCluster.setAttribute('data-cluster-index', clusterIndex);
         tbody.appendChild(currentCluster);
+        clusterIndex++;
     }
     
+    // Store total clusters count
+    totalClustersCount = clusterIndex;
+    
     const endTime = performance.now();
-    const clustersCreated = Math.ceil(logData.length / CLUSTER_SIZE);
-    console.log(`Rendering completed! Rendered ${logData.length} rows in ${clustersCreated} clusters in ${(endTime - startTime).toFixed(2)}ms`);
-    console.log(`Performance improvement: ${CLUSTER_SIZE} DOM operations reduced to ${clustersCreated} operations`);
+    console.log(`Rendering completed! Rendered ${logData.length} rows in ${totalClustersCount} clusters in ${(endTime - startTime).toFixed(2)}ms`);
+    console.log(`Performance improvement: ${CLUSTER_SIZE} DOM operations reduced to ${totalClustersCount} operations`);
+    
+    // Initialize cluster visibility monitoring
+    initializeClusterObserver();
+    updateDebugInfo();
 }
 
 /**
@@ -166,6 +182,122 @@ function renderLogData() {
 function initializeApplication() {
     generateLogData();
     renderLogData();
+}
+
+// ===== CLUSTER VISIBILITY MONITORING SECTION =====
+
+/**
+ * Initializes the Intersection Observer to monitor cluster visibility
+ */
+function initializeClusterObserver() {
+    // Disconnect existing observer if any
+    if (clusterObserver) {
+        clusterObserver.disconnect();
+    }
+    
+    // Create new Intersection Observer
+    const options = {
+        root: document.getElementById('tableWrapper'), // Use the scrollable container as root
+        rootMargin: '0px',
+        threshold: 0.01 // Trigger when 10% of cluster is visible
+    };
+    
+    clusterObserver = new IntersectionObserver(handleClusterVisibility, options);
+    
+    // Observe all cluster elements
+    const clusters = document.querySelectorAll('.log-cluster');
+    clusters.forEach(cluster => {
+        clusterObserver.observe(cluster);
+    });
+    
+    addDebugMessage(`Initialized cluster observer for ${clusters.length} clusters`, 'info');
+    console.log(`Cluster observer initialized for ${clusters.length} clusters`);
+}
+
+/**
+ * Handles cluster visibility changes
+ * @param {IntersectionObserverEntry[]} entries - Array of intersection entries
+ */
+function handleClusterVisibility(entries) {
+    entries.forEach(entry => {
+        const clusterIndex = parseInt(entry.target.getAttribute('data-cluster-index'));
+        
+        if (entry.isIntersecting) {
+            // Cluster entered viewport
+            if (!visibleClusters.has(clusterIndex)) {
+                visibleClusters.add(clusterIndex);
+                addDebugMessage(`Cluster ${clusterIndex} entered viewport`, 'enter');
+                console.log(`Cluster ${clusterIndex} entered viewport`);
+            }
+        } else {
+            // Cluster left viewport
+            if (visibleClusters.has(clusterIndex)) {
+                visibleClusters.delete(clusterIndex);
+                addDebugMessage(`Cluster ${clusterIndex} left viewport`, 'exit');
+                console.log(`Cluster ${clusterIndex} left viewport`);
+            }
+        }
+    });
+    
+    // Update debug display
+    updateDebugInfo();
+}
+
+/**
+ * Updates the debug information display
+ */
+function updateDebugInfo() {
+    const totalClustersElement = document.getElementById('totalClusters');
+    const visibleClustersElement = document.getElementById('visibleClusters');
+    const visibleCountElement = document.getElementById('visibleCount');
+    
+    if (totalClustersElement) {
+        totalClustersElement.textContent = totalClustersCount;
+    }
+    
+    if (visibleClustersElement) {
+        const sortedVisible = Array.from(visibleClusters).sort((a, b) => a - b);
+        visibleClustersElement.textContent = `[${sortedVisible.join(', ')}]`;
+    }
+    
+    if (visibleCountElement) {
+        visibleCountElement.textContent = visibleClusters.size;
+    }
+}
+
+/**
+ * Adds a debug message to the debug log
+ * @param {string} message - The message to add
+ * @param {string} type - The type of message ('enter', 'exit', 'info')
+ */
+function addDebugMessage(message, type = 'info') {
+    const debugLogContent = document.getElementById('debugLogContent');
+    if (!debugLogContent) return;
+    
+    const messageElement = document.createElement('div');
+    messageElement.className = `debug-message ${type}`;
+    
+    const timestamp = new Date().toLocaleTimeString();
+    messageElement.textContent = `[${timestamp}] ${message}`;
+    
+    debugLogContent.appendChild(messageElement);
+    
+    // Auto-scroll to bottom
+    debugLogContent.scrollTop = debugLogContent.scrollHeight;
+    
+    // Limit to last 100 messages to prevent memory issues
+    const messages = debugLogContent.children;
+    if (messages.length > 100) {
+        debugLogContent.removeChild(messages[0]);
+    }
+}
+
+/**
+ * Returns an array of currently visible cluster indices
+ * @returns {number[]} Array of visible cluster indices
+ */
+function getVisibleClusters() {
+    return Array.from(visibleClusters).sort((a, b) => a - b);
 }
 
 // Initialize the application when the page loads

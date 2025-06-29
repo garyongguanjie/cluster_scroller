@@ -25,6 +25,30 @@
                 </div>
             </div>
         </div>
+        
+        <div class="debug-panel">
+            <h3>Cluster Visibility Debug</h3>
+            <div class="debug-info">
+                <div class="debug-row">
+                    <span class="debug-label">Total Clusters:</span>
+                    <span id="totalClusters">0</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Visible Clusters:</span>
+                    <span id="visibleClusters">[]</span>
+                </div>
+                <div class="debug-row">
+                    <span class="debug-label">Visible Count:</span>
+                    <span id="visibleCount">0</span>
+                </div>
+            </div>
+            <div class="debug-log" id="debugLog">
+                <div class="debug-log-header">Activity Log:</div>
+                <div class="debug-log-content" id="debugLogContent">
+                    <!-- Debug messages will appear here -->
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="script.js"></script>
