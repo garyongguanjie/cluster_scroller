@@ -28,7 +28,7 @@ let logData = [];
 
 // Configuration
 const CLUSTER_SIZE = 50; // Number of logs per cluster
-const TOTAL_LOGS = 10000; // Total number of logs to generate
+const TOTAL_LOGS = 100000; // Total number of logs to generate
 const DEBOUNCE_DELAY = 150; // Debounce delay in milliseconds for cluster updates
 
 // Cluster visibility tracking
