@@ -239,6 +239,17 @@ function handleClusterVisibility(entries) {
         }
     });
     
+    // Get visible log indices and add to debug log
+    const visibleIndices = getVisibleLogIndices();
+    if (visibleIndices.startIndex !== -1) {
+        const logCount = visibleIndices.endIndex - visibleIndices.startIndex;
+        addDebugMessage(`Visible log indices: ${visibleIndices.startIndex} to ${visibleIndices.endIndex - 1} (${logCount} logs)`, 'info');
+        console.log(`Visible log indices: start=${visibleIndices.startIndex}, end=${visibleIndices.endIndex} (${logCount} logs)`);
+    } else {
+        addDebugMessage(`No logs currently visible`, 'info');
+        console.log(`No logs currently visible`);
+    }
+    
     // Update debug display
     updateDebugInfo();
 }
@@ -298,6 +309,36 @@ function addDebugMessage(message, type = 'info') {
  */
 function getVisibleClusters() {
     return Array.from(visibleClusters).sort((a, b) => a - b);
+}
+
+/**
+ * Calculates which data log indices are currently in view
+ * @returns {Object} Object with startIndex (inclusive) and endIndex (exclusive) of visible logs
+ */
+function getVisibleLogIndices() {
+    if (visibleClusters.size === 0) {
+        return { startIndex: -1, endIndex: -1 };
+    }
+    
+    const sortedVisibleClusters = Array.from(visibleClusters).sort((a, b) => a - b);
+    const firstVisibleCluster = sortedVisibleClusters[0];
+    const lastVisibleCluster = sortedVisibleClusters[sortedVisibleClusters.length - 1];
+    
+    // Calculate start index (inclusive)
+    const startIndex = firstVisibleCluster * CLUSTER_SIZE;
+    
+    // Calculate end index (exclusive)
+    // For the last cluster, we need to check if it's a full cluster or partial
+    let endIndex;
+    if (lastVisibleCluster === totalClustersCount - 1) {
+        // This is the last cluster, so end index is the total number of logs
+        endIndex = logData.length;
+    } else {
+        // This is not the last cluster, so it's a full cluster
+        endIndex = (lastVisibleCluster + 1) * CLUSTER_SIZE;
+    }
+    
+    return { startIndex, endIndex };
 }
 
 // Initialize the application when the page loads
