@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Log Viewer with Scroll</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="log-container">
+        <h1 class="log-header">Log Viewer</h1>
+        
+
+        <div class="table-wrapper" id="tableWrapper">
+            <div class="table-container">
+                <div class="table-header">
+                    <div class="header-row">
+                        <div class="header-cell time-header">Time</div>
+                        <div class="header-cell level-header">Log Level</div>
+                        <div class="header-cell message-header">Log Message</div>
+                    </div>
+                </div>
+                <div class="table-body" id="logTableBody">
+                    <!-- Log entries will be inserted here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
