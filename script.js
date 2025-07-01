@@ -245,6 +245,7 @@ function createPlaceholderCluster(clusterIndex) {
 function initializeApplication() {
     generateLogData();
     renderLogData();
+    setupJumpControls();
 }
 
 // ===== VIRTUAL SCROLLING SECTION =====
@@ -262,7 +263,7 @@ function initializeVirtualScrollObserver() {
     const options = {
         root: document.getElementById('tableWrapper'), // Use the scrollable container as root
         rootMargin: '200px 0px 200px 0px', // 200px buffer above and below viewport
-        threshold: 0.01 // Trigger when 1% of cluster is visible
+        threshold: 0.1 // Trigger when 1% of cluster is visible
     };
     
     clusterObserver = new IntersectionObserver(handleVirtualScrollVisibility, options);
@@ -558,6 +559,104 @@ function getVisibleLogIndices() {
     }
     
     return { startIndex, endIndex };
+}
+
+/**
+ * Scrolls to a specific row by temporarily disabling virtual scrolling
+ * @param {number} rowIndex - Index of the row to scroll to (0-based)
+ */
+function scrollToRow(rowIndex) {
+    // Validate input
+    if (rowIndex < 0 || rowIndex >= logData.length) {
+        alert(`Invalid row index. Please enter a number between 0 and ${logData.length - 1}`);
+        return;
+    }
+    
+    const clusterIndex = Math.floor(rowIndex / CLUSTER_SIZE);
+    const rowIndexInCluster = rowIndex % CLUSTER_SIZE;
+    
+    addDebugMessage(`Jumping to row ${rowIndex} (cluster ${clusterIndex}, row ${rowIndexInCluster})`, 'info');
+    
+    // 1. Temporarily disable intersection observer
+    if (clusterObserver) {
+        clusterObserver.disconnect();
+        addDebugMessage('Cluster observer disabled for navigation', 'info');
+    }
+    
+    // 2. Pre-load the target cluster (and neighbors for safety)
+    loadCluster(clusterIndex);
+    if (clusterIndex > 0) loadCluster(clusterIndex - 1);
+    if (clusterIndex < totalClustersCount - 1) loadCluster(clusterIndex + 1);
+    
+    // 3. Wait for DOM to update
+    setTimeout(() => {
+        // 4. Scroll to the specific row
+        const cluster = document.querySelector(`[data-cluster-index="${clusterIndex}"]`);
+        if (cluster && cluster.children[rowIndexInCluster]) {
+            const targetRow = cluster.children[rowIndexInCluster];
+            targetRow.scrollIntoView({ 
+                behavior: 'smooth', 
+                block: 'center'
+            });
+            
+            // 5. Highlight the row
+            highlightRow(targetRow);
+            addDebugMessage(`Successfully jumped to row ${rowIndex}`, 'info');
+            
+            // 6. Re-enable intersection observer after scroll completes
+            setTimeout(() => {
+                initializeVirtualScrollObserver();
+                addDebugMessage('Cluster observer re-enabled', 'info');
+            }, 1000); // Wait for smooth scroll animation
+        } else {
+            addDebugMessage(`Failed to find row ${rowIndex}`, 'info');
+            // Re-enable observer even if failed
+            setTimeout(() => {
+                initializeVirtualScrollObserver();
+            }, 100);
+        }
+    }, 150); // Wait for cluster loading
+}
+
+/**
+ * Highlights a row element temporarily
+ * @param {HTMLElement} rowElement - The row element to highlight
+ */
+function highlightRow(rowElement) {
+    // Add highlight class
+    rowElement.classList.add('highlighted-row');
+    
+    // Remove highlight after 3 seconds
+    setTimeout(() => {
+        rowElement.classList.remove('highlighted-row');
+    }, 3000);
+}
+
+/**
+ * Sets up event listeners for the jump controls
+ */
+function setupJumpControls() {
+    const jumpButton = document.getElementById('jumpToRowBtn');
+    const rowInput = document.getElementById('rowIndexInput');
+    
+    if (jumpButton && rowInput) {
+        jumpButton.addEventListener('click', () => {
+            const rowIndex = parseInt(rowInput.value);
+            if (!isNaN(rowIndex)) {
+                scrollToRow(rowIndex);
+            }
+        });
+        
+        // Allow Enter key to trigger jump
+        rowInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                const rowIndex = parseInt(rowInput.value);
+                if (!isNaN(rowIndex)) {
+                    scrollToRow(rowIndex);
+                }
+            }
+        });
+    }
 }
 
 // Initialize the application when the page loads

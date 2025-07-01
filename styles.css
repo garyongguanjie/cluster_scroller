@@ -22,6 +22,37 @@ body {
     font-weight: 300;
 }
 
+.jump-controls {
+    background-color: #f8f9fa;
+    padding: 15px 20px;
+    border-bottom: 1px solid #dee2e6;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.jump-controls input {
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 14px;
+    width: 200px;
+}
+
+.jump-controls button {
+    padding: 8px 16px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.jump-controls button:hover {
+    background-color: #0056b3;
+}
+
 .table-wrapper {
     height: 500px;
     overflow-y: auto;
@@ -242,4 +273,18 @@ body {
 
 .debug-message.info {
     color: #6c757d;
+}
+
+/* Jump to row highlighting styles */
+.highlighted-row {
+    background-color: #fff3cd !important;
+    border: 2px solid #ffc107 !important;
+    transition: all 0.3s ease;
+    animation: highlight-pulse 0.5s ease-in-out;
+}
+
+@keyframes highlight-pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+    100% { transform: scale(1); }
 }
